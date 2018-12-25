@@ -16,7 +16,25 @@ nes2end
     .word RESET
 
 .segment "ZEROPAGE"
-sleeping:   .res 1
+sleeping:       .res 1
+PaletteIndex:   .res 1
+
+; bit 7 is vert:    0 up; 1 down
+; bit 6 is horiz:   0 left; 1 right
+Directions:     .res 1
+
+; Pointers to check routines
+CheckVert:      .res 2
+CheckHoriz:     .res 2
+
+; Make these the center of the metasprite or something.  Don't have to worry
+; about wrap-around then. The bounding box will have a buffer of a few sprites.
+SpriteX:    .res 1
+SpriteY:    .res 1
+
+; TODO: make these "decimal"? eg, 21 == 2.1
+X_SPEED = 1
+Y_SPEED = 1
 
 .segment "BSS"
 PaletteRAM:         .res 32
@@ -61,85 +79,66 @@ RESET:
 :   bit $2002
     bpl :-
 
-    lda #$20
-    sta $2006
-    lda #$00
-    sta $2006
-
-    ldx #32
-    ldy #30
-BgInitLoop:
-    sta $2007
-    dex
-    bne BgInitLoop
-    dey
-    beq @done
-    ldx #32
-    jmp BgInitLoop
-@done:
-
-    lda #$24
-    sta $2006
-    lda #$00
-    sta $2006
-
-    ldx #32
-    ldy #30
-BgInitLoop2:
-    sta $2007
-    dex
-    bne BgInitLoop2
-    dey
-    beq @done
-    ldx #32
-    jmp BgInitLoop2
-@done:
-
-    lda #$23
-    sta $2006
-    lda #$C0
-    sta $2006
-
-    lda #$00
-    ldx #64
-AttrLoop:
-    sta $2007
-    dex
-    bne AttrLoop
-
-    lda #$27
-    sta $2006
-    lda #$C0
-    sta $2006
-
-    lda #$00
-    ldx #64
-AttrLoop2:
-    sta $2007
-    dex
-    bne AttrLoop2
-
     jsr LoadPalettes
 
+    bit $2002
+    lda #$3F
+    sta $2006
+    lda #$00
+    sta $2006
+
+    ldx #31
+@palloop:
+    lda PaletteRAM, x
+    sta $2007
+    dex
+    bpl @palloop
+
+; TODO: Setup sprites
 ; Load first row
-    ldx #0
-    lda #10
-SpLoopRow1:
-    
+;    ldx #0
+;    lda #10
+;SpLoopRow1:
+;    
 
     lda #$18
     sta Sprites+1
 
+    ; Set initial vector to up left.
+    lda #0
+    sta Directions
+
+    ; setup check routines
+    lda #<CheckLeft
+    sta CheckHoriz
+    lda #>CheckLeft
+    sta CheckHoriz+1
+
+    lda #<CheckTop
+    sta CheckVert
+    lda #>CheckTop
+    sta CheckVert+1
+
+    ; Do this after all other init stuff
     lda #%00011110
     sta $2001
 
     lda #%10000000
     sta $2000
 
-; TODO: Setup sprites
-
 DoFrame:
-    ; TODO: move and calc wall collision
+    ; TODO: movement
+    jmp (CheckVert)
+CheckVertDone:
+    beq FlipVertDone
+    jsr FlipVert
+FlipVertDone:
+
+    jmp (CheckHoriz)
+CheckHorizDone:
+    beq FlipHorizDone
+    jsr FlipHoriz
+FlipHorizDone:
 
 WaitFrame:
     lda #1
@@ -151,16 +150,19 @@ WaitFrame:
     jmp DoFrame
 
 NMI:
+    ; only A and X are clobbered
     pha
     txa
     pha
 
+    ; Sprites
     bit $2002
     lda #$00
     sta $2003
     lda #$02
     sta $4014
 
+    ; Palettes.  TODO: only load up the palette we need
     lda #$3F
     sta $2006
     lda #$00
@@ -181,6 +183,7 @@ NMI:
     dex
     bpl @loop
 
+    ; Scroll stuff
     bit $2002
     lda #$00
     sta $2005
@@ -189,11 +192,13 @@ NMI:
     lda #%10000000
     sta $2000
 
+    ; Restore A and X
     pla
     tax
     pla
     rti
 
+; loads full palette
 LoadPalettes:
     ldx #31
     ldy #0
@@ -206,9 +211,110 @@ LoadPalettes:
     bne @loop
     rts
 
+; TODO: These, lol. Setup a bounding box during init, and check SpriteX and
+; SpriteY against it.
+CheckLeft:
+    lda #0
+    rts
+
+CheckRight:
+    lda #0
+    rts
+
+CheckTop:
+    lda #0
+    rts
+
+CheckBottom:
+    lda #0
+    rts
+
+RtsTable:
+    .word FlipVertDone-1
+    .word FlipHorizDone-1
+
+FlipVert:
+    ; Setup RTS trick for CyclePalette
+    ldx #0
+    lda RtsTable+1, x
+    pha
+    lda RtsTable, x
+    pha
+
+    bit Directions
+    bpl @down
+    lda Directions
+    and #%01000000
+    sta Directions
+    jmp CyclePalette
+
+@down:
+    lda Directions
+    eor #%1000000
+    sta Directions
+    jmp CyclePalette
+
+FlipHoriz:
+    ; Setup RTS trick for CyclePalette
+    ldx #2
+    lda RtsTable+1, x
+    pha
+    lda RtsTable, x
+    pha
+
+    bit Directions
+    bvc @left
+    lda Directions
+    and #%10000000
+    sta Directions
+    jmp CyclePalette
+
+@left:
+    lda Directions
+    eor #%0100000
+    sta Directions
+    ;jmp CyclePalette
+
+; loads the next sprite palette
+CyclePalette:
+    lda PaletteIndex
+    ; multiply index by 4
+    asl a
+    asl a
+    tax
+    ldy #4  ; four bytes for the palette
+@loop:
+    lda DVDPals, x
+    ; Load palette backwards into RAM.  The sprites will use the first palette
+    sta PaletteRAM+12, y
+    inx
+    dey
+    bne @loop
+
+    ; increment index for next call
+    inc PaletteIndex
+    lda PaletteIndex
+    cmp DVDPalsLength
+    bcc @nowrap
+    ; wrap if we're past the end of the palette list
+    lda #0
+    sta DVDPalsLength
+
+@nowrap:
+    rts
+
 PaletteData:
-    .byte $0F,$30,$30,$30, $0F,$04,$34,$24, $0F,$15,$0F,$0F, $0F,$11,$11,$11
-    .byte $0F,$00,$10,$30, $0F,$05,$05,$05, $0F,$0A,$0A,$0A, $0F,$11,$11,$11
-    .byte $EA, $EA
+    .byte $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F
+    .byte $0F,$00,$10,$30, $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F
 
 DVDPals:
+    .byte $0F, $00, $10, $20
+    .byte $0F, $06, $16, $26
+    .byte $0F, $13, $23, $33
+    .byte $0F, $0a, $2a, $3a
+    .byte $0F, $11, $21, $31
+    .byte $0F, $15, $25, $35
+    .byte $0f, $14, $24, $34
+DVDPalsEnd:
+
+DVDPalsLength = (DVDPalsEnd - DVDPals) / 4
