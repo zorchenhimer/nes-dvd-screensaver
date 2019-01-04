@@ -215,19 +215,19 @@ LoadPalettes:
 ; SpriteY against it.
 CheckLeft:
     lda #0
-    rts
+    jmp CheckHorizDone
 
 CheckRight:
     lda #0
-    rts
+    jmp CheckHorizDone
 
 CheckTop:
     lda #0
-    rts
+    jmp CheckVertDone
 
 CheckBottom:
     lda #0
-    rts
+    jmp CheckVertDone
 
 RtsTable:
     .word FlipVertDone-1
