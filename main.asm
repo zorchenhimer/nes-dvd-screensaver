@@ -36,6 +36,9 @@ SpriteY:    .res 1
 X_SPEED = 1
 Y_SPEED = 1
 
+TmpId:  .res 1
+TmpX:   .res 1
+
 .segment "BSS"
 PaletteRAM:         .res 32
 
@@ -101,8 +104,13 @@ RESET:
 ;SpLoopRow1:
 ;    
 
-    lda #$18
-    sta Sprites+1
+SpriteSetup:
+    ;lda #$18
+    ;sta Sprites+1
+    lda #$10
+    sta TmpId
+    lda #$00
+    sta TmpX
 
     ; Set initial vector to up left.
     lda #0
@@ -119,11 +127,104 @@ RESET:
     lda #>CheckTop
     sta CheckVert+1
 
+    clc
+    ldy #$10    ; Y pos
+    ldx #0      ; sprite byte index
+@loop0:
+    ; Y
+    tya
+    sta Sprites, x
+
+    ; Tile
+    inx
+    lda TmpId
+    sta Sprites, x
+    adc #2
+    sta TmpId
+
+    inx     ; attr
+
+    ; X
+    inx
+    lda TmpX
+    sta Sprites, x
+    adc #8
+    sta TmpX
+
+    ; next
+    inx
+    cpx #32
+    bne @loop0
+
+    clc
+    lda #$00
+    sta TmpX
+    lda #$30
+    sta TmpId
+    ldy #$20
+@loop1:
+    ; Y
+    tya
+    sta Sprites, x
+
+    ; Tile
+    inx
+    lda TmpId
+    sta Sprites, x
+    adc #2
+    sta TmpId
+
+    inx     ; attr
+
+    ; X
+    inx
+    lda TmpX
+    sta Sprites, x
+    adc #8
+    sta TmpX
+
+    ; next
+    inx
+    cpx #64
+    bne @loop1
+
+    clc
+    lda #$00
+    sta TmpX
+    lda #$50
+    sta TmpId
+    ldy #$30
+@loop2:
+    ; Y
+    tya
+    sta Sprites, x
+
+    ; Tile
+    inx
+    lda TmpId
+    sta Sprites, x
+    adc #2
+    sta TmpId
+
+    inx     ; attr
+
+    ; X
+    inx
+    lda TmpX
+    sta Sprites, x
+    adc #8
+    sta TmpX
+
+    ; next
+    inx
+    cpx #96
+    bne @loop2
+
     ; Do this after all other init stuff
     lda #%00011110
     sta $2001
 
-    lda #%10000000
+    lda #%10100000
     sta $2000
 
 DoFrame:
@@ -189,7 +290,7 @@ NMI:
     sta $2005
     sta $2005
 
-    lda #%10000000
+    lda #%10100000
     sta $2000
 
     ; Restore A and X
