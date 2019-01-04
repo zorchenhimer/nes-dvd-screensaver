@@ -27,8 +27,8 @@ Directions:     .res 1
 CheckVert:      .res 2
 CheckHoriz:     .res 2
 
-; Make these the center of the metasprite or something.  Don't have to worry
-; about wrap-around then. The bounding box will have a buffer of a few sprites.
+; These are the center of the metasprite.  Don't have to worry about
+; wrap-around then. The bounding box will have a buffer of a few sprites.
 SpriteX:    .res 1
 SpriteY:    .res 1
 
@@ -38,6 +38,18 @@ Y_SPEED = 1
 
 TmpId:  .res 1
 TmpX:   .res 1
+
+controller:     .res 1
+
+; Button Constants
+BUTTON_A        = 1 << 7
+BUTTON_B        = 1 << 6
+BUTTON_SELECT   = 1 << 5
+BUTTON_START    = 1 << 4
+BUTTON_UP       = 1 << 3
+BUTTON_DOWN     = 1 << 2
+BUTTON_LEFT     = 1 << 1
+BUTTON_RIGHT    = 1 << 0
 
 .segment "BSS"
 PaletteRAM:         .res 32
@@ -111,6 +123,11 @@ SpriteSetup:
     sta TmpId
     lda #$00
     sta TmpX
+
+    lda #128
+    sta SpriteX
+    lda #120
+    sta SpriteY
 
     ; Set initial vector to up left.
     lda #0
@@ -228,6 +245,31 @@ SpriteSetup:
     sta $2000
 
 DoFrame:
+    jsr ReadControllers
+
+    lda #BUTTON_UP
+    and controller
+    beq :+
+    dec SpriteY
+
+:   lda #BUTTON_DOWN
+    and controller
+    beq :+
+    inc SpriteY
+
+:   lda #BUTTON_LEFT
+    and controller
+    beq :+
+    dec SpriteX
+
+:   lda #BUTTON_RIGHT
+    and controller
+    beq :+
+    inc SpriteX
+
+:   ;jsr UpdateSprites
+     jsr UpdateSprites
+
     ; TODO: movement
     jmp (CheckVert)
 CheckVertDone:
@@ -292,6 +334,8 @@ NMI:
 
     lda #%10100000
     sta $2000
+
+    dec sleeping
 
     ; Restore A and X
     pla
@@ -402,6 +446,116 @@ CyclePalette:
     sta DVDPalsLength
 
 @nowrap:
+    rts
+
+; Load SpriteX and SpriteY and set the correct values for all of the sprites
+UpdateSprites:
+    lda SpriteY
+    sec
+    sbc #20
+    clc
+
+; Set Y
+    ldx #0
+@loopRow0Y:
+    sta Sprites, x
+    inx
+    inx
+    inx
+    inx
+    cpx #32
+    bne @loopRow0Y
+
+    clc
+    adc #$10
+
+    ldx #0
+@loopRow1Y:
+    sta Sprites+32, x
+    inx
+    inx
+    inx
+    inx
+    cpx #32
+    bne @loopRow1Y
+
+    clc
+    adc #$10
+
+    ldx #0
+@loopRow2Y:
+    sta Sprites+64, x
+    inx
+    inx
+    inx
+    inx
+    cpx #32
+    bne @loopRow2Y
+
+; Set X
+    lda SpriteX
+    sec
+    sbc #32
+    sta TmpX
+    clc
+
+    ldx #3
+@loopRow0X:
+    sta Sprites, x
+    adc #8
+    inx
+    inx
+    inx
+    inx
+    cpx #35
+    bne @loopRow0X
+
+    clc
+    lda TmpX
+    ldx #3
+@loopRow1X:
+    sta Sprites+32, x
+    adc #8
+    inx
+    inx
+    inx
+    inx
+    cpx #35
+    bne @loopRow1X
+
+    clc
+    lda TmpX
+    ldx #3
+@loopRow2X:
+    sta Sprites+64, x
+    adc #8
+    inx
+    inx
+    inx
+    inx
+    cpx #35
+    bne @loopRow2X
+
+    rts
+
+; Player input
+ReadControllers:
+    lda #0
+    sta controller
+
+    ; Freeze input
+    lda #1
+    sta $4016
+    lda #0
+    sta $4016
+
+    LDX #$08
+@player1:
+    lda $4016
+    lsr A           ; Bit0 -> Carry
+    rol controller ; Bit0 <- Carry
+    dex
+    bne @player1
     rts
 
 PaletteData:
