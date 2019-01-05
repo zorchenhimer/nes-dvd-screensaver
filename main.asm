@@ -40,6 +40,9 @@ TmpId:  .res 1
 TmpX:   .res 1
 
 controller:     .res 1
+controllerTmp:  .res 1
+controllerOld:  .res 1
+btnPressedMask: .res 1
 
 ; Button Constants
 BUTTON_A        = 1 << 7
@@ -50,6 +53,12 @@ BUTTON_UP       = 1 << 3
 BUTTON_DOWN     = 1 << 2
 BUTTON_LEFT     = 1 << 1
 BUTTON_RIGHT    = 1 << 0
+
+; Walls
+W_TOP       = 26
+W_BOTTOM    = 210
+W_LEFT      = 32
+W_RIGHT     = 224
 
 .segment "BSS"
 PaletteRAM:         .res 32
@@ -117,6 +126,10 @@ RESET:
 ;    
 
 SpriteSetup:
+    ; Move sprite zero out of the way
+    lda #$FF
+    sta SpriteZero
+
     ;lda #$18
     ;sta Sprites+1
     lda #$10
@@ -246,8 +259,12 @@ SpriteSetup:
 
 DoFrame:
     jsr ReadControllers
+    lda #BUTTON_A
+    jsr ButtonPressed
+    beq :+
+    jsr CyclePalette
 
-    lda #BUTTON_UP
+:   lda #BUTTON_UP
     and controller
     beq :+
     dec SpriteY
@@ -267,20 +284,35 @@ DoFrame:
     beq :+
     inc SpriteX
 
-:   ;jsr UpdateSprites
-     jsr UpdateSprites
+:   jsr UpdateSprites
+
+;    bit Directions
+;    bmi @down
+;    ; up
+;    dec SpriteY
+;    jmp @updateHoriz
+;
+;@down:
+;    inc SpriteY
+;
+;@updateHoriz:
+;    bit Directions
+;    bvs @right
+;    ; left
+;    dec SpriteX
+;    jmp @updateDone
+;
+;@right:
+;    inc SpriteX
+;
+;@updateDone:
+;    jsr UpdateSprites
 
     ; TODO: movement
     jmp (CheckVert)
-CheckVertDone:
-    beq FlipVertDone
-    jsr FlipVert
 FlipVertDone:
 
     jmp (CheckHoriz)
-CheckHorizDone:
-    beq FlipHorizDone
-    jsr FlipHoriz
 FlipHorizDone:
 
 WaitFrame:
@@ -359,20 +391,26 @@ LoadPalettes:
 ; TODO: These, lol. Setup a bounding box during init, and check SpriteX and
 ; SpriteY against it.
 CheckLeft:
-    lda #0
-    jmp CheckHorizDone
+    lda #W_LEFT
+    cmp SpriteX
+    bcc :+
+    jmp FlipHoriz
+:   jmp FlipHorizDone
 
 CheckRight:
-    lda #0
-    jmp CheckHorizDone
+    lda SpriteX
+    cmp #W_RIGHT
+    bcc :+
+    jmp FlipHorizDone
+:   jmp FlipHoriz
 
 CheckTop:
     lda #0
-    jmp CheckVertDone
+    jmp FlipVertDone
 
 CheckBottom:
     lda #0
-    jmp CheckVertDone
+    jmp FlipVertDone
 
 RtsTable:
     .word FlipVertDone-1
@@ -431,7 +469,7 @@ CyclePalette:
 @loop:
     lda DVDPals, x
     ; Load palette backwards into RAM.  The sprites will use the first palette
-    sta PaletteRAM+12, y
+    sta PaletteRAM+11, y
     inx
     dey
     bne @loop
@@ -439,11 +477,11 @@ CyclePalette:
     ; increment index for next call
     inc PaletteIndex
     lda PaletteIndex
-    cmp DVDPalsLength
-    bcc @nowrap
+    cmp #DVDPalsLength
+    bne @nowrap
     ; wrap if we're past the end of the palette list
     lda #0
-    sta DVDPalsLength
+    sta PaletteIndex
 
 @nowrap:
     rts
@@ -558,6 +596,32 @@ ReadControllers:
     bne @player1
     rts
 
+ButtonPressed:
+    sta btnPressedMask
+
+    and controller
+    sta controllerTmp
+
+    lda controllerOld
+    and btnPressedMask
+
+    cmp controllerTmp
+    bne btnPress_stb
+
+    ; no button change
+    rts
+
+btnPress_stb:
+    ; button released
+    lda controllerTmp
+    bne btnPress_stc
+    rts
+
+btnPress_stc:
+    ; button pressed
+    lda #1
+    rts
+
 PaletteData:
     .byte $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F
     .byte $0F,$00,$10,$30, $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F, $0F,$0F,$0F,$0F
@@ -569,7 +633,7 @@ DVDPals:
     .byte $0F, $0a, $2a, $3a
     .byte $0F, $11, $21, $31
     .byte $0F, $15, $25, $35
-    .byte $0f, $14, $24, $34
+    .byte $0F, $14, $24, $34
 DVDPalsEnd:
 
 DVDPalsLength = (DVDPalsEnd - DVDPals) / 4
