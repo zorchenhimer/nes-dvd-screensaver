@@ -118,14 +118,7 @@ RESET:
     dex
     bpl @palloop
 
-; TODO: Setup sprites
-; Load first row
-;    ldx #0
-;    lda #10
-;SpLoopRow1:
-;    
-
-SpriteSetup:
+; Sprite setup
     ; Move sprite zero out of the way
     lda #$FF
     sta SpriteZero
@@ -139,7 +132,7 @@ SpriteSetup:
 
     lda #128
     sta SpriteX
-    lda #120
+    lda #110
     sta SpriteY
 
     ; Set initial vector to up left.
@@ -258,57 +251,28 @@ SpriteSetup:
     sta $2000
 
 DoFrame:
-    jsr ReadControllers
-    lda #BUTTON_A
-    jsr ButtonPressed
-    beq :+
-    jsr CyclePalette
-
-:   lda #BUTTON_UP
-    and controller
-    beq :+
+    bit Directions
+    bmi @down
+    ; up
     dec SpriteY
+    jmp @updateHoriz
 
-:   lda #BUTTON_DOWN
-    and controller
-    beq :+
+@down:
     inc SpriteY
 
-:   lda #BUTTON_LEFT
-    and controller
-    beq :+
+@updateHoriz:
+    bit Directions
+    bvs @right
+    ; left
     dec SpriteX
+    jmp @updateDone
 
-:   lda #BUTTON_RIGHT
-    and controller
-    beq :+
+@right:
     inc SpriteX
 
-:   jsr UpdateSprites
+@updateDone:
+    jsr UpdateSprites
 
-;    bit Directions
-;    bmi @down
-;    ; up
-;    dec SpriteY
-;    jmp @updateHoriz
-;
-;@down:
-;    inc SpriteY
-;
-;@updateHoriz:
-;    bit Directions
-;    bvs @right
-;    ; left
-;    dec SpriteX
-;    jmp @updateDone
-;
-;@right:
-;    inc SpriteX
-;
-;@updateDone:
-;    jsr UpdateSprites
-
-    ; TODO: movement
     jmp (CheckVert)
 FlipVertDone:
 
@@ -358,15 +322,6 @@ NMI:
     dex
     bpl @loop
 
-    ; Scroll stuff
-    bit $2002
-    lda #$00
-    sta $2005
-    sta $2005
-
-    lda #%10100000
-    sta $2000
-
     dec sleeping
 
     ; Restore A and X
@@ -394,69 +349,85 @@ CheckLeft:
     lda #W_LEFT
     cmp SpriteX
     bcc :+
+
+    lda #<CheckRight
+    sta CheckHoriz
+    lda #>CheckRight
+    sta CheckHoriz+1
     jmp FlipHoriz
+
 :   jmp FlipHorizDone
 
 CheckRight:
     lda SpriteX
     cmp #W_RIGHT
     bcc :+
-    jmp FlipHorizDone
-:   jmp FlipHoriz
+
+    lda #<CheckLeft
+    sta CheckHoriz
+    lda #>CheckLeft
+    sta CheckHoriz+1
+    jmp FlipHoriz
+
+:   jmp FlipHorizDone
 
 CheckTop:
-    lda #0
-    jmp FlipVertDone
+    lda #W_TOP
+    cmp SpriteY
+    bcc :+
+
+    lda #<CheckBottom
+    sta CheckVert
+    lda #>CheckBottom
+    sta CheckVert+1
+    jmp FlipVert
+
+:   jmp FlipVertDone
 
 CheckBottom:
-    lda #0
-    jmp FlipVertDone
+    lda SpriteY
+    cmp #W_BOTTOM
+    bcc :+
 
-RtsTable:
-    .word FlipVertDone-1
-    .word FlipHorizDone-1
+    lda #<CheckTop
+    sta CheckVert
+    lda #>CheckTop
+    sta CheckVert+1
+    jmp FlipVert
+
+:   jmp FlipVertDone
 
 FlipVert:
-    ; Setup RTS trick for CyclePalette
-    ldx #0
-    lda RtsTable+1, x
-    pha
-    lda RtsTable, x
-    pha
+    jsr CyclePalette
 
     bit Directions
     bpl @down
     lda Directions
     and #%01000000
     sta Directions
-    jmp CyclePalette
+    jmp FlipVertDone
 
 @down:
     lda Directions
-    eor #%1000000
+    eor #%10000000
     sta Directions
-    jmp CyclePalette
+    jmp FlipVertDone
 
 FlipHoriz:
-    ; Setup RTS trick for CyclePalette
-    ldx #2
-    lda RtsTable+1, x
-    pha
-    lda RtsTable, x
-    pha
+    jsr CyclePalette
 
     bit Directions
     bvc @left
     lda Directions
     and #%10000000
     sta Directions
-    jmp CyclePalette
+    jmp FlipHorizDone
 
 @left:
     lda Directions
-    eor #%0100000
+    eor #%01000000
     sta Directions
-    ;jmp CyclePalette
+    jmp FlipHorizDone
 
 ; loads the next sprite palette
 CyclePalette:
@@ -574,52 +545,6 @@ UpdateSprites:
     cpx #35
     bne @loopRow2X
 
-    rts
-
-; Player input
-ReadControllers:
-    lda #0
-    sta controller
-
-    ; Freeze input
-    lda #1
-    sta $4016
-    lda #0
-    sta $4016
-
-    LDX #$08
-@player1:
-    lda $4016
-    lsr A           ; Bit0 -> Carry
-    rol controller ; Bit0 <- Carry
-    dex
-    bne @player1
-    rts
-
-ButtonPressed:
-    sta btnPressedMask
-
-    and controller
-    sta controllerTmp
-
-    lda controllerOld
-    and btnPressedMask
-
-    cmp controllerTmp
-    bne btnPress_stb
-
-    ; no button change
-    rts
-
-btnPress_stb:
-    ; button released
-    lda controllerTmp
-    bne btnPress_stc
-    rts
-
-btnPress_stc:
-    ; button pressed
-    lda #1
     rts
 
 PaletteData:
