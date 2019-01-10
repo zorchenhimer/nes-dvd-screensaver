@@ -6,11 +6,7 @@ I thought it'd be funny.  That's why.
 # Assembling
 ## Requirements
 
-- [cc65](https://cc65.github.io/)
-- [GNU Make](https://www.gnu.org/software/make/)
-- (optional) [ld65-labels](https://github.com/zorchenhimer/ld65-labels)
-
-If you don't want or need debugging labels, edit the `Makefile` to remove the `.mlb` prerequisite from the `all` recipe.
+See this guide for setting up the build environtment: [NES_Build_Environment.md](https://gist.github.com/zorchenhimer/b5e1f30feb082f5a920c6b7e7a072b13)
 
 ## How Do
 
