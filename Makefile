@@ -1,27 +1,16 @@
-ifeq ($(OS),Windows_NT)
-export PATH := $(PATH);../tools/cc65/bin;../tools/ld65-labels
-else
 export PATH := $(PATH):../tools/cc65/bin:../tools/ld65-labels
-endif
-
 
 # Assembler and linker paths
 CA = ca65
 LD = ld65
 
-# Tool to generate credits data
-#CR = go run ../credits/generate-credits.go
-#CL = go run ../tools/ld65-labels/main.go
-CL = ld65-labels
-
 # Mapper configuration for linker
 NESCFG = nes_000.cfg
-
-# Name of the main source file, minus the extension
 
 # any CHR files included
 CHR = dvd.chr
 
+# Name of the destination rom, minus the extension
 NAME = dvd
 
 # List of all the sources files
@@ -30,16 +19,13 @@ SOURCES = main.asm nes2header.inc
 # misc
 RM = rm
 
-.PHONY: clean default cleanSym symbols
+.PHONY: clean default
 
 default: all
-all: bin/$(NAME).nes bin/$(NAME).mlb
-symbols: cleanSym bin/$(NAME).mlb
+all: bin/$(NAME).nes
 
 clean:
 	-$(RM) bin/*.*
-cleanSym:
-	-$(RM) bin/*.mlb
 
 bin/:
 	mkdir bin
@@ -56,9 +42,5 @@ bin/$(NAME).nes: bin/$(NAME).o $(NESCFG)
 		-C $(NESCFG) \
 		-m bin/$(NAME).nes.map -vm \
 		-Ln bin/$(NAME).labels \
-		--dbgfile bin/$(NAME).nes.db \
+		--dbgfile bin/$(NAME).nes.dbg \
 		bin/$(NAME).o
-
-bin/$(NAME).mlb: bin/$(NAME).nes.db
-	$(CL) bin/$(NAME).nes.db
-
